@@ -20,26 +20,34 @@ func handleFatalError(err error, errorMessage string) {
 }
 
 func getFormattedUrl() (string, error) {
-	var inputReader *bufio.Reader
-	var input string
-	var formattedInput string
-	var err error
-
-	inputReader = bufio.NewReader(os.Stdin)
+	inputReader := bufio.NewReader(os.Stdin)
 	fmt.Printf("What Website do you want to scan?\n")
-	input, err = inputReader.ReadString('\n')
+	input, err := inputReader.ReadString('\n')
 	handleFatalError(err, "ERROR READING INPUT")
-	formattedInput = strings.ReplaceAll(input, "\n", "/robots.txt")
+	formattedInput := strings.ReplaceAll(input, "\n", "")
 	return "https://" + formattedInput, nil
 }
+
 func main() {
 	url, err := getFormattedUrl()
 	handleFatalError(err, "ERROR FORMATTING THAT URL")
-	response, err := http.Get(url)
+	response, err := http.Get(url + "/robots.txt")
 	handleFatalError(err, "ERROR GETTING ROBOTS.TXT from URL: "+url)
 	body, err := io.ReadAll(response.Body)
 	handleFatalError(err, "ERROR READING BODY OF RESPONSE")
-	fmt.Println(string(body))
 	err = response.Body.Close()
 	handleFatalError(err, "ERROR CLOSING REQUEST CONNECTION")
+	scanner := bufio.NewScanner(strings.NewReader(string(body)))
+	for scanner.Scan() {
+		if strings.Contains(scanner.Text(), "Disallow") {
+			directory := strings.ReplaceAll(scanner.Text(), "Disallow: ", "")
+			requestUrl := url + directory
+			response, err = http.Get(requestUrl)
+			if err != nil {
+				fmt.Printf("%s: Error: %s\n", requestUrl, err.Error())
+				continue
+			}
+			fmt.Printf("%s: %s\n", requestUrl, response.Status)
+		}
+	}
 }
